@@ -23,7 +23,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func writeSegment1(t *testing.T, fpath string) {
+func writeSegment1(t testing.TB, fpath string) {
 	init := fmp4.Init{
 		Tracks: []*fmp4.InitTrack{
 			{
@@ -101,7 +101,7 @@ func writeSegment1(t *testing.T, fpath string) {
 	require.NoError(t, err)
 }
 
-func writeSegment2(t *testing.T, fpath string) {
+func writeSegment2(t testing.TB, fpath string) {
 	init := fmp4.Init{
 		Tracks: []*fmp4.InitTrack{
 			{
@@ -189,7 +189,7 @@ func writeSegment2(t *testing.T, fpath string) {
 	require.NoError(t, err)
 }
 
-func writeSegment3(t *testing.T, fpath string) {
+func writeSegment3(t testing.TB, fpath string) {
 	init := fmp4.Init{
 		Tracks: []*fmp4.InitTrack{
 			{
