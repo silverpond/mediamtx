@@ -36,6 +36,17 @@ The server will return a list of timespans in JSON format:
 ]
 ```
 
+The server also provides a faster variant of the same endpoint:
+
+```
+http://localhost:9996/fastlist?path=[mypath]&start=[start]&end=[end]
+```
+
+It accepts the same parameters and returns the same response format as `/list`, but it never reads whole segment files: durations are estimated from file modification times and segments are joined by time adjacency, opening only the first file of each contiguous timespan. This makes it much faster on large recording stores or slow storage, with two caveats:
+
+- durations are approximate when file modification times were not preserved (e.g. recordings copied without timestamps) or when a segment was closed long after its last sample;
+- segments recorded across a stream restart may be joined into a single timespan when the gap between them is under a second; playback of such a timespan stops at the restart boundary.
+
 The server provides an endpoint to download recordings:
 
 ```
