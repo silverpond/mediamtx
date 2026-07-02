@@ -110,8 +110,17 @@ type Path struct {
 	Path  string
 }
 
-// Decode decodes a Path.
-func (p *Path) Decode(format string, v string) bool {
+// CompiledFormat is the compiled form of a recording path format.
+// Callers that decode many paths against the same format (e.g. a directory
+// walk) should compile the format once instead of calling Path.Decode, which
+// compiles the regexp on every call.
+type CompiledFormat struct {
+	re           *regexp.Regexp
+	groupMapping []string
+}
+
+// CompileFormat compiles a recording path format for repeated decoding.
+func CompileFormat(format string) *CompiledFormat {
 	re := format
 
 	for _, ch := range []uint8{
@@ -175,7 +184,15 @@ func (p *Path) Decode(format string, v string) bool {
 		cur = cur[1:]
 	}
 
-	matches := r.FindStringSubmatch(v)
+	return &CompiledFormat{
+		re:           r,
+		groupMapping: groupMapping,
+	}
+}
+
+// Decode decodes a Path against the compiled format.
+func (cf *CompiledFormat) Decode(p *Path, v string) bool {
+	matches := cf.re.FindStringSubmatch(v)
 	if matches == nil {
 		return false
 	}
@@ -183,7 +200,7 @@ func (p *Path) Decode(format string, v string) bool {
 	values := make(map[string]string)
 
 	for i, match := range matches[1:] {
-		values[groupMapping[i]] = match
+		values[cf.groupMapping[i]] = match
 	}
 
 	var year int
@@ -244,6 +261,11 @@ func (p *Path) Decode(format string, v string) bool {
 	}
 
 	return true
+}
+
+// Decode decodes a Path.
+func (p *Path) Decode(format string, v string) bool {
+	return CompileFormat(format).Decode(p, v)
 }
 
 // Encode encodes a path.
