@@ -129,12 +129,16 @@ func TestOnList(t *testing.T) {
 				require.Equal(t, []any{
 					map[string]any{
 						"duration": float64(66),
+						"width":    float64(1920),
+						"height":   float64(1080),
 						"start":    time.Date(2008, 11, 7, 11, 22, 0, 500000000, time.Local).Format(time.RFC3339Nano),
 						"url": "http://localhost:9996/get?duration=66&path=mypath&start=" +
 							url.QueryEscape(time.Date(2008, 11, 7, 11, 22, 0, 500000000, time.Local).Format(time.RFC3339Nano)),
 					},
 					map[string]any{
 						"duration": float64(4),
+						"width":    float64(1920),
+						"height":   float64(1080),
 						"start":    time.Date(2009, 11, 7, 11, 23, 2, 500000000, time.Local).Format(time.RFC3339Nano),
 						"url": "http://localhost:9996/get?duration=4&path=mypath&start=" +
 							url.QueryEscape(time.Date(2009, 11, 7, 11, 23, 2, 500000000, time.Local).Format(time.RFC3339Nano)),
@@ -145,12 +149,16 @@ func TestOnList(t *testing.T) {
 				require.Equal(t, []any{
 					map[string]any{
 						"duration": float64(65),
+						"width":    float64(1920),
+						"height":   float64(1080),
 						"start":    time.Date(2008, 11, 7, 11, 22, 1, 500000000, time.Local).Format(time.RFC3339Nano),
 						"url": "http://localhost:9996/get?duration=65&path=mypath&start=" +
 							url.QueryEscape(time.Date(2008, 11, 7, 11, 22, 1, 500000000, time.Local).Format(time.RFC3339Nano)),
 					},
 					map[string]any{
 						"duration": float64(2),
+						"width":    float64(1920),
+						"height":   float64(1080),
 						"start":    time.Date(2009, 11, 7, 11, 23, 2, 500000000, time.Local).Format(time.RFC3339Nano),
 						"url": "http://localhost:9996/get?duration=2&path=mypath&start=" +
 							url.QueryEscape(time.Date(2009, 11, 7, 11, 23, 2, 500000000, time.Local).Format(time.RFC3339Nano)),
@@ -161,6 +169,8 @@ func TestOnList(t *testing.T) {
 				require.Equal(t, []any{
 					map[string]any{
 						"duration": float64(4),
+						"width":    float64(1920),
+						"height":   float64(1080),
 						"start":    time.Date(2008, 11, 7, 11, 24, 2, 500000000, time.Local).Format(time.RFC3339Nano),
 						"url": "http://localhost:9996/get?duration=4&path=mypath&start=" +
 							url.QueryEscape(time.Date(2008, 11, 7, 11, 24, 2, 500000000, time.Local).Format(time.RFC3339Nano)),
@@ -171,12 +181,16 @@ func TestOnList(t *testing.T) {
 				require.Equal(t, []any{
 					map[string]any{
 						"duration": float64(62),
+						"width":    float64(1920),
+						"height":   float64(1080),
 						"start":    time.Date(2008, 11, 7, 11, 22, 0, 500000000, time.Local).Format(time.RFC3339Nano),
 						"url": "http://localhost:9996/get?duration=62&path=mypath&start=" +
 							url.QueryEscape(time.Date(2008, 11, 7, 11, 22, 0, 500000000, time.Local).Format(time.RFC3339Nano)),
 					},
 					map[string]any{
 						"duration": float64(1),
+						"width":    float64(1920),
+						"height":   float64(1080),
 						"start":    time.Date(2008, 11, 7, 11, 23, 2, 500000000, time.Local).Format(time.RFC3339Nano),
 						"url": "http://localhost:9996/get?duration=1&path=mypath&start=" +
 							url.QueryEscape(time.Date(2008, 11, 7, 11, 23, 2, 500000000, time.Local).Format(time.RFC3339Nano)),
@@ -359,6 +373,8 @@ func TestOnListCachedDuration(t *testing.T) {
 	require.Equal(t, []any{
 		map[string]any{
 			"duration": float64(50),
+			"width":    float64(1920),
+			"height":   float64(1080),
 			"start":    time.Date(2008, 11, 7, 11, 22, 0, 500000000, time.Local).Format(time.RFC3339Nano),
 			"url": "http://localhost:9996/get?duration=50&path=mypath&start=" +
 				url.QueryEscape(time.Date(2008, 11, 7, 11, 22, 0, 500000000, time.Local).Format(time.RFC3339Nano)),
@@ -422,6 +438,8 @@ func TestOnListXForwardedProto(t *testing.T) {
 	require.Equal(t, []any{
 		map[string]any{
 			"duration": float64(62),
+			"width":    float64(1920),
+			"height":   float64(1080),
 			"start":    time.Date(2008, 11, 7, 11, 22, 0, 500000000, time.Local).Format(time.RFC3339Nano),
 			"url": "https://localhost:9996/get?duration=62&path=mypath&start=" +
 				url.QueryEscape(time.Date(2008, 11, 7, 11, 22, 0, 500000000, time.Local).Format(time.RFC3339Nano)),

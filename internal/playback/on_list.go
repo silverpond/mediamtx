@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/bluenviron/mediacommon/v2/pkg/codecs/av1"
@@ -61,31 +63,56 @@ func parseSegment(seg *recordstore.Segment) (*parsedSegment, error) {
 	}, nil
 }
 
-func parseSegments(segments []*recordstore.Segment) ([]*parsedSegment, error) {
-	parsed := make([]*parsedSegment, len(segments))
-	ch := make(chan error)
+// segmentIOConcurrency bounds parallel filesystem operations on segment
+// files. Some parallelism helps on cold storage (it keeps the device queue
+// busy), but large values flood disks and network filesystems.
+const segmentIOConcurrency = 8
 
-	// process segments in parallel.
-	// parallel random access should improve performance in most cases.
-	// ref: https://pkolaczk.github.io/disk-parallelism/
-	for i, seg := range segments {
-		go func(i int, seg *recordstore.Segment) {
-			var err error
-			parsed[i], err = parseSegment(seg)
-			ch <- err
-		}(i, seg)
+// forEachBounded runs fn(i) for each i in [0, n) using a fixed pool of
+// worker goroutines.
+func forEachBounded(n int, concurrency int, fn func(int)) {
+	if concurrency > n {
+		concurrency = n
 	}
 
-	var err error
+	var next atomic.Int64
+	var wg sync.WaitGroup
 
-	for range segments {
-		err2 := <-ch
-		if err2 != nil {
-			err = err2
+	for w := 0; w < concurrency; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				i := int(next.Add(1)) - 1
+				if i >= n {
+					return
+				}
+				fn(i)
+			}
+		}()
+	}
+
+	wg.Wait()
+}
+
+func parseSegments(segments []*recordstore.Segment) ([]*parsedSegment, error) {
+	parsed := make([]*parsedSegment, len(segments))
+	errs := make([]error, len(segments))
+
+	// process segments in parallel, with bounded concurrency.
+	// parallel random access should improve performance in most cases.
+	// ref: https://pkolaczk.github.io/disk-parallelism/
+	forEachBounded(len(segments), segmentIOConcurrency, func(i int) {
+		parsed[i], errs[i] = parseSegment(segments[i])
+	})
+
+	for _, err := range errs {
+		if err != nil {
+			return nil, err
 		}
 	}
 
-	return parsed, err
+	return parsed, nil
 }
 
 func urlScheme(ctx *gin.Context, trustedProxies conf.IPNetworks, encryption bool) string {
@@ -176,6 +203,8 @@ func concatenateSegments(parsed []*parsedSegment) []listEntry {
 	return out
 }
 
+var errMPEGTSNotSupported = errors.New("MPEG-TS format is not supported yet")
+
 func parseAndConcatenate(
 	recordFormat conf.RecordFormat,
 	segments []*recordstore.Segment,
@@ -190,27 +219,36 @@ func parseAndConcatenate(
 		return out, nil
 	}
 
-	return nil, fmt.Errorf("MPEG-TS format is not supported yet")
+	return nil, errMPEGTSNotSupported
 }
 
-func (s *Server) onList(ctx *gin.Context) {
+type listParams struct {
+	pathName string
+	pathConf *conf.Path
+	start    *time.Time
+	end      *time.Time
+}
+
+// parseListParams validates and extracts the common parameters of /list and
+// /fastlist. On failure it writes the error response and returns false.
+func (s *Server) parseListParams(ctx *gin.Context) (*listParams, bool) {
 	pathName := ctx.Query("path")
 
 	// validate path name before passing it to the authentication manager
 	err := conf.IsValidPathName(pathName)
 	if err != nil {
 		s.writeError(ctx, http.StatusBadRequest, fmt.Errorf("invalid path name: %w (%s)", err, pathName))
-		return
+		return nil, false
 	}
 
 	if !s.doAuth(ctx, pathName) {
-		return
+		return nil, false
 	}
 
 	pathConf, err := s.safeFindPathConf(pathName)
 	if err != nil {
 		s.writeError(ctx, http.StatusBadRequest, err)
-		return
+		return nil, false
 	}
 
 	var start *time.Time
@@ -220,7 +258,7 @@ func (s *Server) onList(ctx *gin.Context) {
 		tmp, err = time.Parse(time.RFC3339, rawStart)
 		if err != nil {
 			s.writeError(ctx, http.StatusBadRequest, fmt.Errorf("invalid start: %w", err))
-			return
+			return nil, false
 		}
 		start = &tmp
 	}
@@ -232,25 +270,40 @@ func (s *Server) onList(ctx *gin.Context) {
 		tmp, err = time.Parse(time.RFC3339, rawEnd)
 		if err != nil {
 			s.writeError(ctx, http.StatusBadRequest, fmt.Errorf("invalid end: %w", err))
-			return
+			return nil, false
 		}
 		end = &tmp
 	}
 
-	segments, err := recordstore.FindSegments(pathConf, pathName, start, end)
+	return &listParams{
+		pathName: pathName,
+		pathConf: pathConf,
+		start:    start,
+		end:      end,
+	}, true
+}
+
+// findSegments wraps recordstore.FindSegments, mapping its errors to HTTP
+// responses. On failure it writes the error response and returns false.
+func (s *Server) findSegments(ctx *gin.Context, params *listParams) ([]*recordstore.Segment, bool) {
+	segments, err := recordstore.FindSegments(params.pathConf, params.pathName, params.start, params.end)
 	if err != nil {
 		if errors.Is(err, recordstore.ErrNoSegmentsFound) {
 			s.writeError(ctx, http.StatusNotFound, err)
 		} else {
 			s.writeError(ctx, http.StatusBadRequest, err)
 		}
-		return
+		return nil, false
 	}
 
-	entries, err := parseAndConcatenate(pathConf.RecordFormat, segments)
-	if err != nil {
-		s.writeError(ctx, http.StatusInternalServerError, err)
-		return
+	return segments, true
+}
+
+// trimEntries adjusts the first and last entry to fit within start and end.
+// Returns nil when no entries remain.
+func trimEntries(entries []listEntry, start *time.Time, end *time.Time) []listEntry {
+	if len(entries) == 0 {
+		return nil
 	}
 
 	if start != nil {
@@ -264,8 +317,7 @@ func (s *Server) onList(ctx *gin.Context) {
 			entries = entries[1:]
 
 			if len(entries) == 0 {
-				s.writeError(ctx, http.StatusNotFound, recordstore.ErrNoSegmentsFound)
-				return
+				return nil
 			}
 		} else if firstEntry.Start.Before(*start) {
 			entries[0].Duration -= listEntryDuration(start.Sub(firstEntry.Start))
@@ -280,6 +332,10 @@ func (s *Server) onList(ctx *gin.Context) {
 		}
 	}
 
+	return entries
+}
+
+func (s *Server) fillEntryURLs(ctx *gin.Context, pathName string, entries []listEntry) {
 	scheme := urlScheme(ctx, s.TrustedProxies, s.Encryption)
 
 	for i := range entries {
@@ -295,6 +351,32 @@ func (s *Server) onList(ctx *gin.Context) {
 		}
 		entries[i].URL = u.String()
 	}
+}
+
+func (s *Server) onList(ctx *gin.Context) {
+	params, ok := s.parseListParams(ctx)
+	if !ok {
+		return
+	}
+
+	segments, ok := s.findSegments(ctx, params)
+	if !ok {
+		return
+	}
+
+	entries, err := parseAndConcatenate(params.pathConf.RecordFormat, segments)
+	if err != nil {
+		s.writeError(ctx, http.StatusInternalServerError, err)
+		return
+	}
+
+	entries = trimEntries(entries, params.start, params.end)
+	if len(entries) == 0 {
+		s.writeError(ctx, http.StatusNotFound, recordstore.ErrNoSegmentsFound)
+		return
+	}
+
+	s.fillEntryURLs(ctx, params.pathName, entries)
 
 	ctx.JSON(http.StatusOK, entries)
 }
