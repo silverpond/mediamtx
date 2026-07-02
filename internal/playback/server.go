@@ -47,6 +47,7 @@ func (s *Server) Initialize() error {
 	router.Use(s.middlewarePreflightRequests)
 
 	router.GET("/list", s.onList)
+	router.GET("/fastlist", s.onFastList)
 	router.GET("/get", s.onGet)
 
 	s.httpServer = &httpp.Server{
